@@ -6,6 +6,9 @@ on:
 jobs:
   handle_message:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write        # push branches / commits
+      pull-requests: write   # create PRs
     env:
       THRESHOLD: 10   # max messages per second
       GH_TOKEN: ${{ github.token }}
