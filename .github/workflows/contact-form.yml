@@ -1,0 +1,74 @@
+name: Contact Form Submission
+on:
+  repository_dispatch:
+    types: [contact_form_submission]
+
+jobs:
+  handle_message:
+    runs-on: ubuntu-latest
+    env:
+      THRESHOLD: 10   # max messages per second
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Set up variables
+        run: |
+          CURRENT_SECOND=$(date +%s)
+          echo "CURRENT_SECOND=$CURRENT_SECOND" >> $GITHUB_ENV
+          echo "COUNTER=0" >> $GITHUB_ENV
+
+      - name: Check form disabled
+        run: |
+          if [ -f form_disabled.txt ]; then
+            echo "FORM_DISABLED=true" >> $GITHUB_ENV
+          else
+            echo "FORM_DISABLED=false" >> $GITHUB_ENV
+          fi
+
+      - name: Process rate limit
+        if: env.FORM_DISABLED == 'false'
+        run: |
+          # read previous second & counter from environment (workflow-local only)
+          PREV_SECOND=${GITHUB_ENV_PREV_SECOND:-0}
+          COUNTER=${GITHUB_ENV_COUNTER:-0}
+          NOW=$CURRENT_SECOND
+
+          if [ "$NOW" -ne "$PREV_SECOND" ]; then
+            COUNTER=1
+          else
+            COUNTER=$((COUNTER + 1))
+          fi
+
+          echo "COUNTER=$COUNTER" >> $GITHUB_ENV
+          echo "PREV_SECOND=$NOW" >> $GITHUB_ENV
+
+          if [ "$COUNTER" -gt "$THRESHOLD" ]; then
+            echo "Disabling form due to too many messages"
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            # Directly check out the main branch, no need for a new branch
+            git checkout main
+            echo "Form disabled due to high submission rate" > form_disabled.txt
+            git add form_disabled.txt
+            git commit -m "Disable contact form: high submission rate"
+            git push origin main
+          fi
+
+      - name: Create message PR
+        if: env.FORM_DISABLED == 'false'
+        run: |
+          MESSAGE_FILE="messages/${{ github.event.client_payload.filename }}"
+          MESSAGE_CONTENT="${{ github.event.client_payload.content }}"
+
+          # Create branch for message
+          BRANCH="messages/${{ github.event.client_payload.filename }}"
+          git checkout -b $BRANCH
+          mkdir -p messages
+          echo "$MESSAGE_CONTENT" > "$MESSAGE_FILE"
+          git add "$MESSAGE_FILE"
+          git commit -m "New contact message"
+          git push origin $BRANCH
+
+          # Create PR
+          gh pr create --title "New Contact Message" --body "Encrypted message added" --head $BRANCH --base main
