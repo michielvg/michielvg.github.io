@@ -1,4 +1,4 @@
-name: Contact Form Submission
+name: contact-form-submission
 on:
   repository_dispatch:
     types: [contact_form_submission]
@@ -63,6 +63,8 @@ jobs:
 
           # Create branch for message
           BRANCH="messages/${{ github.event.client_payload.filename }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
           git checkout -b $BRANCH
           mkdir -p messages
           echo "$MESSAGE_CONTENT" > "$MESSAGE_FILE"
